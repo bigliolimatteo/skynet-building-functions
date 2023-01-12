@@ -7,7 +7,8 @@ CREATE TABLE IF NOT EXISTS points
     x numeric, 
     y numeric,
     z numeric,
-    geometry geometry(PointZ, 4326)
+    geometry geometry(Point, 4326),
+    final_geometry geometry(PointZ, 4326)
 );
 
 -- Create footprints table
@@ -24,7 +25,7 @@ COPY points (id, x, y, z)
 FROM :points_source_path
 WITH (FORMAT CSV, HEADER true);
 
-update points set geometry = ST_MakePoint(x, y, z);
+update points set geometry = ST_MakePoint(x, y), final_geometry = ST_MakePoint(x, y, z);
 
 -- Copy footprints data from source path
 COPY footprints (id, geometry_text)
@@ -44,9 +45,9 @@ COPY (
         SELECT f.id as footprint_id,
                 ST_AsText(f.geometry) as footprint_geometry, 
                 p.id as point_id,
-                p.geometry as point_geometry
+                p.final_geometry as point_geometry
         FROM footprints f
-        INNER JOIN points p on ST_Intersects(f.buffered_geometry, ST_Force2D(p.geometry))
+        INNER JOIN points p on ST_Intersects(f.buffered_geometry, p.geometry)
         ) joined_data 
     group by footprint_id, footprint_geometry)
 TO :output_path
