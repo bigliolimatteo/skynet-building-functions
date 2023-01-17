@@ -7,7 +7,7 @@ output_path=$3
 
 # Start the Docker container with PostgreSQL
 docker run --name skynet \
--e=POSTGRES_PASSWORD=mysecretpassword \
+-e=POSTGRES_PASSWORD=mysecretpassword -p 5432:5432 \
 -d postgis/postgis 
 
 # Wait for the container to start up
