@@ -55,6 +55,7 @@ COPY (
 		-- Height of roof (Max above - Min above)
 		max_in_footprint - percentile_40_in_footprint as roof_height,
 		footprint_area,
+		points,
 		footprint_geometry,
 		points_geometry
 	from  ( 
@@ -80,6 +81,7 @@ COPY (
 				-- TODO Slope on a grid over the footprint
 				-- TODO Numer of relative Max/Min in footprint
 				-- TODO Proximity of other footprints?
+				concat('[', string_agg(point_coords, ','), ']') as points,
 				ST_AsText(footprint_geometry) as footprint_geometry, 
 				ST_AsText(ST_Collect(point_geometry)) AS points_geometry
 		from (
@@ -87,7 +89,8 @@ COPY (
 					edifc_stat,
 					edifc_ty,
 					edifc_uso,
-					ST_Z(p.final_geometry) as point_height, 
+					concat('[',ST_X(p.final_geometry),',',ST_Y(p.final_geometry),',',ST_Z(p.final_geometry), ']') as point_coords,
+					ST_Z(p.final_geometry) as point_height,
 					f.geometry as footprint_geometry, 
 					p.geometry as point_geometry_2d, 
 					p.final_geometry as point_geometry
