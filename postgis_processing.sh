@@ -5,6 +5,9 @@ points_source_path=$1
 footprints_source_path=$2
 output_path=$3
 
+# Clear past volumes
+docker volume rm $(docker volume ls -q)
+
 # Start the Docker container with PostgreSQL
 docker run --name skynet \
 -e=POSTGRES_PASSWORD=mysecretpassword -p 5432:5432 \
