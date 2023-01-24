@@ -11,11 +11,32 @@ import seaborn as sn
 import json
 from shapely import wkt
 import ast
-from sklearn.preprocessing import OrdinalEncoder
+
+feature_cols = ['max_in_footprint', 'percentile_20_in_footprint', 'percentile_40_in_footprint', \
+              'percentile_60_in_footprint', 'percentile_80_in_footprint', 'min_overrall', \
+              'building_height', 'roof_height', 'footprint_area']
+edifc_uso_to_include = ['commerciale', 'industriale', 'residenziale', 'servizio pubblico']
+
+
+def preprocess_cnn_dataset(df):
+    with open("data/utils/edifc_uso_general.json", "r") as f:
+        edifc_uso_mapping = json.load(f) 
+    
+    df["edifc_uso_desc"] = df["edifc_uso"].map(edifc_uso_mapping)
+    df = df[df["edifc_uso_desc"].isin(edifc_uso_to_include)]
+    df['points'] = df.points.apply(lambda x: ast.literal_eval(x))
+
+    n = df.shape[1]
+    cnn_data = []
+    for _, row in df.iterrows():
+        _, _, interp_z = interpolate_points(*map(np.array, zip(*row["points"])), num=100)
+        cnn_data.append([row["footprint_id"], row["edifc_uso_desc"]] + list(interp_z.ravel()))
+
+    return pd.DataFrame(cnn_data, columns=["footprint_id", "edifc_uso_desc"] + list(range(10000)))
+
 
 def preprocess_features_dataset(df):
     columns_to_drop = ['edifc_stat', 'edifc_ty', 'points_geometry', 'footprint_geometry', 'points', 'edifc_uso']
-    edifc_uso_to_include = ['commerciale', 'industriale', 'residenziale', 'servizio pubblico']
 
     with open("data/utils/edifc_uso_general.json", "r") as f:
         edifc_uso_mapping = json.load(f) 
@@ -26,7 +47,6 @@ def preprocess_features_dataset(df):
 
 def preprocess_complete_dataset(df):
     columns_to_drop = ['edifc_stat', 'edifc_ty', 'points_geometry']
-    edifc_uso_to_include = ['commerciale', 'industriale', 'residenziale', 'servizio pubblico']
 
     with open("data/utils/edifc_uso_general.json", "r") as f:
         edifc_uso_mapping = json.load(f) 
@@ -39,7 +59,7 @@ def preprocess_complete_dataset(df):
     return  df[df["edifc_uso_desc"].isin(edifc_uso_to_include)].drop(columns=columns_to_drop).dropna()
 
 
-def load_and_preprocess_multiple_csv_from_path(path, preprocess_function=lambda x: x, only_first_n=None, **kwargs):
+def load_and_preprocess_multiple_csv_from_path(path, preprocess_function=lambda x: x, filter_by_id=None, only_first_n=None, **kwargs):
     files = [f for f in os.listdir(path) if f.endswith("csv")]
     files_to_load = files if only_first_n == None else files[:only_first_n]
 
@@ -47,13 +67,15 @@ def load_and_preprocess_multiple_csv_from_path(path, preprocess_function=lambda 
     dfs = []
     for i, file in enumerate(files_to_load):
         print(f"Loading file {i}/{n}", end="\r", flush=True)
-        try:
-            filepath = os.path.join(path, file)
-            df = pd.read_csv(filepath, **kwargs)
-            filtered_df = preprocess_function(df)
-            dfs.append(filtered_df)
-        except:
-            print(f"File named {file} not loaded properly!")
+        # try:
+        filepath = os.path.join(path, file)
+        df = pd.read_csv(filepath, **kwargs)
+        if filter_by_id is not None:
+            df = df[df["footprint_id"].isin(filter_by_id)]
+        filtered_df = preprocess_function(df)
+        dfs.append(filtered_df)
+        # except:
+        #     print(f"File named {file} not loaded properly!")
     return pd.concat(dfs)
 
 def interpolate_points(x, y, z, num=200):
@@ -61,7 +83,7 @@ def interpolate_points(x, y, z, num=200):
     y_linspace = np.linspace(min(y), max(y), num=num)
 
     x_grid, y_grid = np.meshgrid(x_linspace, y_linspace)  # 2D grid for interpolation
-    interp = LinearNDInterpolator(list(zip(x, y)), z)
+    interp = LinearNDInterpolator(list(zip(x, y)), z, fill_value=np.min(z))
 
     return x_grid, y_grid, interp(x_grid, y_grid)
 
