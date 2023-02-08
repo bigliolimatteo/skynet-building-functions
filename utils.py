@@ -18,6 +18,10 @@ feature_cols = ['max_in_footprint', 'percentile_20_in_footprint', 'percentile_40
 edifc_uso_to_include = ['commerciale', 'industriale', 'residenziale', 'servizio pubblico']
 
 
+#######################################################################################################################
+#                                             Preprocessing Functions                                                 #
+#######################################################################################################################
+
 def preprocess_cnn_dataset(df):
     with open("data/utils/edifc_uso_general.json", "r") as f:
         edifc_uso_mapping = json.load(f) 
@@ -78,6 +82,11 @@ def load_and_preprocess_multiple_csv_from_path(path, preprocess_function=lambda 
         #     print(f"File named {file} not loaded properly!")
     return pd.concat(dfs)
 
+
+#######################################################################################################################
+#                                             Logics and processing                                                   #
+#######################################################################################################################
+
 def interpolate_points(x, y, z, num=200):
     x_linspace = np.linspace(min(x), max(x), num=num)
     y_linspace = np.linspace(min(y), max(y), num=num)
@@ -86,6 +95,36 @@ def interpolate_points(x, y, z, num=200):
     interp = LinearNDInterpolator(list(zip(x, y)), z, fill_value=np.min(z))
 
     return x_grid, y_grid, interp(x_grid, y_grid)
+
+def multiclass_label_encoder(labels):
+
+    # Define mapping and encode labels
+    encoder = {label: encoding for encoding, label in enumerate(np.unique(labels))}
+    y = [encoder[label] for label in labels]
+    return y, encoder
+
+def balance_dataset(dataset, column_name):
+    column_sizes = dataset.groupby([column_name]).size()
+    min_n_rows = min(column_sizes)
+    col_values = list(column_sizes.index)
+
+    dfs = []
+    for edifc_uso in col_values:
+        dfs.append(dataset[dataset[column_name] == edifc_uso].sample(n=min_n_rows))
+    return pd.concat(dfs)
+
+def normalize_images(raw_images):
+  n_images = raw_images.shape[0]
+
+  mins = raw_images.min(axis=1).reshape(n_images,1)
+  shifted_images = np.subtract(raw_images, mins)
+  maxes = shifted_images.max(axis=1).reshape(n_images,1)
+  return np.divide(shifted_images, maxes)
+
+
+#######################################################################################################################
+#                                                Plots and Graphs                                                     #
+#######################################################################################################################
 
 def plot_points(x, y, z, ax, title=None):
     ax.scatter(x, y, c=z, s=.15)
@@ -133,16 +172,6 @@ def show_dataset_sample(points, footprint=None, figsize=(20, 8)):
 
     plt.draw()
 
-def balance_dataset(dataset, column_name):
-    column_sizes = dataset.groupby([column_name]).size()
-    min_n_rows = min(column_sizes)
-    col_values = list(column_sizes.index)
-
-    dfs = []
-    for edifc_uso in col_values:
-        dfs.append(dataset[dataset[column_name] == edifc_uso].sample(n=min_n_rows))
-    return pd.concat(dfs)
-
 def plot_vectors(X, y, encoder, title="Plot", figsize=(20, 10)):
     pca = decomposition.PCA(n_components=2)
     pca.fit(X) # Compute PCA
@@ -186,9 +215,10 @@ def plot_confusion_matrix(cm, labels_encoder,
     plt.ylabel('True label')
     plt.xlabel('Predicted label')
 
-def show_dataset_balance(dataset, column_name):
+def show_dataset_balance(dataset, column_name, title=""):
     sn.countplot(x = column_name, data = dataset, palette="Set2") 
     plt.xticks(rotation=45)
+    plt.title(title)
     plt.show()
 
 def show_data_example(dataset, example_n): 
@@ -199,10 +229,20 @@ def show_data_example(dataset, example_n):
     else:
         show_dataset_sample(points)
 
-def multiclass_label_encoder(labels):
+def show_nn_metrics(history):
+  _, ax=plt.subplots(2,1, figsize=(15, 8))
 
-    # Define mapping and encode labels
-    encoder = {label: encoding for encoding, label in enumerate(np.unique(labels))}
-    y = [encoder[label] for label in labels]
+  ax[0].plot(history['accuracy'])
+  ax[0].plot(history['val_accuracy'])
+  ax[0].set_xlabel('Epoch')
+  ax[0].set_ylabel('Accuracy')
+  ax[0].legend(['Training', 'Validation'])
 
-    return y, encoder
+
+  ax[1].plot(history['loss'])
+  ax[1].plot(history['val_loss'])
+  ax[1].set_xlabel('Epoch')
+  ax[1].set_ylabel('Loss')
+  ax[1].legend(['Training', 'Validation'])
+
+  plt.show()
